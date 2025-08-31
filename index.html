@@ -7826,224 +7826,326 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function() {
-  console.log("🔧 Initializing swipe system...");
+  console.log("🎨 Restoring beautiful swipe system with cart loading");
   
-  const SWIPE_THRESHOLD = 25;
-  const MIN_SWIPE_DISTANCE = 60;
-  const ANIM_MS = 300;
+  const SWIPE_THRESHOLD = 24;
+  const EDGE_OFFSET = 20;
+  const ANIM_MS = 250;
+  const MICRO_OFFSET = 10;
 
   let startX = 0, startY = 0;
   let isSwiping = false;
+  let activePage = null, nextPage = null;
   let swipeDirection = null;
-  let currentPage = null;
+  let horizontalDetected = false;
+  let animationFrameId = null;
 
-  // Добавляем стили
+  // Ваши оригинальные красивые стили
   const swipeStyles = `
-    .swipeable-page {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-      z-index: 100;
+    body, .page-container { 
+      touch-action: pan-y pinch-zoom; 
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-text-size-adjust: none;
+      -webkit-tap-highlight-color: transparent;
     }
-    
-    .no-transition {
-      transition: none !important;
+    .page-container { 
+      position: relative; 
+      width: 100%; 
+      height: 100%; 
+      overflow: hidden; 
     }
-    
+    .swipeable-page { 
+      position: absolute; 
+      top:0; 
+      left:0; 
+      width:100%; 
+      height:100%; 
+      will-change: transform; 
+      transition: transform 0.25s ease-out; 
+      z-index: 10;
+    }
+    .no-transition { 
+      transition: none !important; 
+    }
+    .pe-none { 
+      pointer-events: none !important; 
+    }
     .swipe-in-progress {
       overflow: hidden !important;
     }
-    
-    #main-page,
-    #cabinet-page,
-    #storage-page {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
   `;
   
-  const styleEl = document.createElement('style');
+  const styleEl = document.createElement("style");
   styleEl.textContent = swipeStyles;
   document.head.appendChild(styleEl);
 
-  // Функция для загрузки корзины
-  function loadStorageCart() {
-    console.log("🛒 Loading storage cart...");
-    
-    // Проверяем и вызываем функции если они существуют
-    const functions = [
-      'renderStorageCart', 'initStoragePage', 
-      'updateStorageBadge', 'updateCartIconCount'
+  // Устанавливаем viewport для запрета масштабирования
+  function setViewport() {
+    let viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+      viewport = document.createElement('meta');
+      viewport.name = 'viewport';
+      document.head.appendChild(viewport);
+    }
+    viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+  }
+
+  setViewport();
+
+  function getCurrentPage() {
+    const pages = [
+      document.getElementById("main-page"),
+      document.getElementById("cabinet-page"), 
+      document.getElementById("storage-page")
     ];
     
-    functions.forEach((funcName, index) => {
-      if (typeof window[funcName] === 'function') {
-        setTimeout(() => {
-          window[funcName]();
-          console.log(`✅ ${funcName} executed`);
-        }, 100 + (index * 50));
-      }
-    });
+    // Находим видимую страницу
+    return pages.find(page => page && page.style.display !== "none") || pages[0];
   }
 
-  // Получаем текущую страницу
-  function getCurrentPage() {
-    const pages = ['main-page', 'cabinet-page', 'storage-page'];
-    for (const pageId of pages) {
-      const page = document.getElementById(pageId);
-      if (page && page.style.display !== 'none') {
-        return page;
+  // Функция для загрузки корзины при открытии склада
+  function loadStorageCart() {
+    console.log("🛒 Loading storage cart after swipe...");
+    
+    // Вызываем функции с задержкой чтобы анимация завершилась
+    setTimeout(() => {
+      if (typeof renderStorageCart === 'function') {
+        renderStorageCart();
+        console.log("✅ Storage cart rendered");
       }
-    }
-    return document.getElementById('main-page');
-  }
-
-  // Показываем страницу
-  function showPage(pageId) {
-    console.log(`📄 Showing page: ${pageId}`);
-    
-    // Скрываем все страницы
-    ['main-page', 'cabinet-page', 'storage-page'].forEach(id => {
-      const page = document.getElementById(id);
-      if (page) page.style.display = 'none';
-    });
-    
-    // Показываем нужную страницу
-    const targetPage = document.getElementById(pageId);
-    if (targetPage) {
-      targetPage.style.display = 'block';
       
-      // Загружаем корзину если открыли склад
-      if (pageId === 'storage-page') {
+      if (typeof initStoragePage === 'function') {
+        initStoragePage();
+        console.log("✅ Storage page initialized");
+      }
+      
+      if (typeof updateStorageBadge === 'function') {
+        updateStorageBadge();
+      }
+      
+      if (typeof updateCartIconCount === 'function') {
+        updateCartIconCount();
+      }
+    }, ANIM_MS + 50);
+  }
+
+  function prepareNextPage(direction) {
+    activePage = getCurrentPage();
+    const main = document.getElementById("main-page");
+    const cab = document.getElementById("cabinet-page");
+    const stor = document.getElementById("storage-page");
+
+    // Очищаем предыдущие состояния
+    if (nextPage) {
+      nextPage.style.display = "none";
+      nextPage.classList.remove("swipeable-page", "no-transition", "pe-none");
+      nextPage.style.transform = "";
+      nextPage = null;
+    }
+
+    // Запрещаем свайпы во время анимаций или если активная страница не найдена
+    if (!activePage || activePage.classList.contains("pe-none")) {
+      return false;
+    }
+
+    // Правильная логика навигации
+    if (activePage.id === "main-page") {
+      nextPage = (direction === "left") ? cab : stor;
+    } 
+    else if (activePage.id === "cabinet-page" && direction === "right") {
+      nextPage = main;
+    }
+    else if (activePage.id === "storage-page" && direction === "left") {
+      nextPage = main;
+    }
+
+    if (!nextPage) return false;
+
+    // Запрещаем взаимодействие с элементами во время свайпа
+    document.body.classList.add('swipe-in-progress');
+
+    nextPage.style.display = "block";
+    nextPage.classList.add("swipeable-page", "no-transition", "pe-none");
+    nextPage.style.zIndex = "11";
+    nextPage.style.transform = (direction === "right") ? "translateX(-100%)" : "translateX(100%)";
+    
+    activePage.classList.add("swipeable-page", "no-transition");
+    activePage.style.zIndex = "12";
+    activePage.style.transform = "translateX(0)";
+    
+    return true;
+  }
+
+  function clearAfterSuccess() {
+    if (activePage) {
+      activePage.style.display = "none";
+      activePage.classList.remove("swipeable-page", "no-transition", "pe-none");
+      activePage.style.transform = "";
+      activePage.style.zIndex = "";
+    }
+    if (nextPage) {
+      nextPage.classList.remove("swipeable-page", "no-transition", "pe-none");
+      nextPage.style.transform = "";
+      nextPage.style.zIndex = "";
+      
+      // ДОБАВЛЕНО: Загружаем корзину при переходе на склад
+      if (nextPage.id === "storage-page") {
         loadStorageCart();
       }
+      
+      activePage = nextPage;
+      nextPage = null;
     }
     
-    triggerVibration();
+    document.body.classList.remove('swipe-in-progress');
+    isSwiping = false;
   }
 
-  // Обработчики событий
-  function handleTouchStart(e) {
-    if (isSwiping || e.touches.length !== 1) return;
+  function clearAfterCancel() {
+    if (nextPage) {
+      nextPage.style.display = "none";
+      nextPage.classList.remove("swipeable-page", "no-transition", "pe-none");
+      nextPage.style.transform = "";
+      nextPage.style.zIndex = "";
+      nextPage = null;
+    }
+    if (activePage) {
+      activePage.classList.remove("swipeable-page", "no-transition", "pe-none");
+      activePage.style.transform = "";
+      activePage.style.zIndex = "";
+    }
     
-    // Проверяем можно ли свайпать
-    if (e.target.closest('input, textarea, select, button, a, .no-swipe')) return;
+    document.body.classList.remove('swipe-in-progress');
+    isSwiping = false;
+  }
+
+  function finishSwipe(success) {
+    if (!nextPage || !activePage) {
+      clearAfterCancel();
+      return;
+    }
+
+    activePage.classList.remove("no-transition");
+    nextPage.classList.remove("no-transition");
+
+    if (success) {
+      activePage.style.transform = (swipeDirection === "right") ? "translateX(100%)" : "translateX(-100%)";
+      nextPage.style.transform = "translateX(0)";
+
+      try {
+        if (navigator.vibrate) navigator.vibrate(20);
+      } catch(e){}
+
+      setTimeout(clearAfterSuccess, ANIM_MS);
+    } else {
+      activePage.style.transform = "translateX(0)";
+      nextPage.style.transform = (swipeDirection === "right") ? "translateX(-100%)" : "translateX(100%)";
+      setTimeout(clearAfterCancel, ANIM_MS);
+    }
+  }
+
+  function handleTouchMove(x, y) {
+    if (!isSwiping) return;
+
+    let dx = x - startX;
+    const dy = y - startY;
+
+    if (!horizontalDetected) {
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > SWIPE_THRESHOLD) {
+        horizontalDetected = true;
+      } else {
+        return;
+      }
+    }
+
+    swipeDirection = dx > 0 ? "right" : "left";
+
+    if (!nextPage) {
+      if (!prepareNextPage(swipeDirection)) {
+        return;
+      }
+    }
+
+    // Ограничиваем перемещение
+    const maxOffset = window.innerWidth * 0.8;
+    dx = Math.max(-maxOffset, Math.min(maxOffset, dx));
     
+    requestAnimationFrame(() => {
+      if (activePage && nextPage) {
+        activePage.style.transform = `translateX(${dx}px)`;
+        
+        if (swipeDirection === "right") {
+          nextPage.style.transform = `translateX(${dx - window.innerWidth}px)`;
+        } else {
+          nextPage.style.transform = `translateX(${dx + window.innerWidth}px)`;
+        }
+      }
+    });
+  }
+
+  document.addEventListener("touchstart", (e) => {
+    if (isSwiping) return;
+    
+    // Запрещаем свайпы на интерактивных элементах
+    if (e.target.closest(".no-swipe, input, textarea, select, button, a, .delete-btn, .payment-btn")) {
+      return;
+    }
+
     const t = e.touches[0];
     startX = t.clientX;
     startY = t.clientY;
-    currentPage = getCurrentPage();
-    isSwiping = true;
     swipeDirection = null;
-    
-    if (currentPage) {
-      currentPage.classList.add('no-transition');
-    }
-  }
+    horizontalDetected = false;
+    isSwiping = true;
 
-  function handleTouchMove(e) {
-    if (!isSwiping || !currentPage) return;
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (!isSwiping) return;
     
     const x = e.touches[0].clientX;
     const y = e.touches[0].clientY;
-    const dx = x - startX;
-    const dy = y - startY;
     
-    // Определяем направление
-    if (!swipeDirection && Math.abs(dx) > SWIPE_THRESHOLD) {
-      swipeDirection = dx > 0 ? 'right' : 'left';
-      e.preventDefault();
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
     }
     
-    // Применяем смещение
-    if (swipeDirection) {
-      const maxOffset = window.innerWidth * 0.8;
-      const offset = Math.max(-maxOffset, Math.min(maxOffset, dx));
-      currentPage.style.transform = `translateX(${offset}px)`;
-    }
-  }
-
-  function handleTouchEnd(e) {
-    if (!isSwiping || !currentPage) return;
-    
-    const dx = e.changedTouches[0].clientX - startX;
-    const pageId = currentPage.id;
-    
-    if (swipeDirection && Math.abs(dx) > MIN_SWIPE_DISTANCE) {
-      // Определяем следующую страницу
-      const pageMap = {
-        'main-page': { 'left': 'cabinet-page', 'right': 'storage-page' },
-        'cabinet-page': { 'right': 'main-page' },
-        'storage-page': { 'left': 'main-page' }
-      };
-      
-      const nextPageId = pageMap[pageId]?.[swipeDirection];
-      if (nextPageId) {
-        // Анимация перехода
-        currentPage.style.transform = swipeDirection === 'right' ? 
-          'translateX(100%)' : 'translateX(-100%)';
-        currentPage.style.transition = 'transform 0.3s ease';
-        
-        setTimeout(() => {
-          showPage(nextPageId);
-          currentPage.style.transform = '';
-          currentPage.style.transition = '';
-        }, 300);
-      }
-    } else {
-      // Возвращаем на место
-      currentPage.style.transform = '';
-      currentPage.style.transition = 'transform 0.2s ease';
-      setTimeout(() => {
-        currentPage.style.transition = '';
-      }, 200);
-    }
-    
-    // Сбрасываем состояние
-    if (currentPage) {
-      currentPage.classList.remove('no-transition');
-    }
-    isSwiping = false;
-    swipeDirection = null;
-    currentPage = null;
-  }
-
-  // Инициализация
-  function initSwipeSystem() {
-    console.log("🔄 Setting up swipe listeners...");
-    
-    // Убираем старые обработчики
-    document.removeEventListener('touchstart', handleTouchStart);
-    document.removeEventListener('touchmove', handleTouchMove);
-    document.removeEventListener('touchend', handleTouchEnd);
-    
-    // Добавляем новые обработчики
-    document.addEventListener('touchstart', handleTouchStart, { passive: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', handleTouchEnd, { passive: true });
-    
-    // Добавляем классы страницам
-    ['main-page', 'cabinet-page', 'storage-page'].forEach(pageId => {
-      const page = document.getElementById(pageId);
-      if (page) page.classList.add('swipeable-page');
+    animationFrameId = requestAnimationFrame(() => {
+      handleTouchMove(x, y);
     });
     
-    console.log("✅ Swipe system ready!");
-  }
+    if (horizontalDetected && e.cancelable) {
+      e.preventDefault();
+    }
+  }, { passive: false });
 
-  // Запускаем инициализацию
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSwipeSystem);
-  } else {
-    // Если документ уже загружен, запускаем сразу
-    setTimeout(initSwipeSystem, 100);
-  }
+  document.addEventListener("touchend", (e) => {
+    if (!isSwiping) return;
+    
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+
+    const dx = e.changedTouches[0].clientX - startX;
+    const success = horizontalDetected && Math.abs(dx) > window.innerWidth / 4;
+    
+    if (horizontalDetected && nextPage) {
+      finishSwipe(success);
+    } else {
+      clearAfterCancel();
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchcancel", () => {
+    if (isSwiping) {
+      clearAfterCancel();
+    }
+  }, { passive: true });
+
+  // Инициализация
+  console.log("✅ Beautiful swipe system restored with cart loading!");
 
 })();
 </script>
