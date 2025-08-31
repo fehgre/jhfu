@@ -7899,7 +7899,35 @@ document.addEventListener('DOMContentLoaded', function() {
     ];
     
     // Находим видимую страницу
-    return pages.find(page => page && page.style.display !== "none") || pages[0];
+    return pages.find(page => page && page.style.display !== "none")  pages[0];
+  }
+
+  // Функция для загрузки корзины при открытии склада
+  function loadStorageCart() {
+    console.log("🛒 Loading storage cart...");
+    
+    // Проверяем и вызываем функции для загрузки корзины
+    if (typeof renderStorageCart === 'function') {
+      setTimeout(() => {
+        renderStorageCart();
+        console.log("✅ Storage cart rendered");
+      }, 100);
+    }
+    
+    if (typeof initStoragePage === 'function') {
+      setTimeout(() => {
+        initStoragePage();
+        console.log("✅ Storage page initialized");
+      }, 150);
+    }
+    
+    if (typeof updateStorageBadge === 'function') {
+      setTimeout(updateStorageBadge, 200);
+    }
+    
+    if (typeof updateCartIconCount === 'function') {
+      setTimeout(updateCartIconCount, 200);
+    }
   }
 
   function prepareNextPage(direction) {
@@ -7917,7 +7945,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Запрещаем свайпы во время анимаций или если активная страница не найдена
-    if (!activePage || activePage.classList.contains("pe-none")) {
+    if (!activePage  activePage.classList.contains("pe-none")) {
       return false;
     }
 
@@ -7960,6 +7988,12 @@ document.addEventListener('DOMContentLoaded', function() {
       nextPage.classList.remove("swipeable-page", "no-transition", "pe-none");
       nextPage.style.transform = "";
       nextPage.style.zIndex = "";
+      
+      // ДОБАВЛЕНО: Загружаем корзину при переходе на склад
+      if (nextPage.id === "storage-page") {
+        loadStorageCart();
+      }
+      
       activePage = nextPage;
       nextPage = null;
     }
