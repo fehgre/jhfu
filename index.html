@@ -7838,35 +7838,6 @@ document.addEventListener('DOMContentLoaded', function() {
   let horizontalDetected = false;
   let animationFrameId = null;
 
-  // Функция для обновления индикатора навигации (ДОБАВЛЕНО)
-  function updateNavIndicator(pageElement) {
-    if (!pageElement) return;
-    
-    const pageToNavMap = {
-      'main-page': document.getElementById('treasure-nav-item'),
-      'cabinet-page': document.getElementById('cabinet-nav-item'),
-      'storage-page': document.getElementById('storage-nav-item')
-    };
-    
-    const activeNavItem = pageToNavMap[pageElement.id];
-    
-    if (activeNavItem) {
-      // Удаляем активное состояние со всех элементов
-      const navItems = document.querySelectorAll('.nav-item');
-      navItems.forEach(item => {
-        item.classList.remove('active');
-        const indicator = item.querySelector('.active-indicator');
-        if (indicator) indicator.remove();
-      });
-      
-      // Добавляем активное состояние к текущему элементу
-      activeNavItem.classList.add('active');
-      const indicator = document.createElement('div');
-      indicator.className = 'active-indicator';
-      activeNavItem.appendChild(indicator);
-    }
-  }
-
   // Добавляем стили для отключения масштабирования и настройки свайпов
   const swipeStyles = `
     body, .page-container { 
@@ -7928,7 +7899,7 @@ document.addEventListener('DOMContentLoaded', function() {
     ];
     
     // Находим видимую страницу
-    return pages.find(page => page && page.style.display !== "none")  pages[0];
+    return pages.find(page => page && page.style.display !== "none") || pages[0];
   }
 
   function prepareNextPage(direction) {
@@ -7946,7 +7917,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Запрещаем свайпы во время анимаций или если активная страница не найдена
-    if (!activePage  activePage.classList.contains("pe-none")) {
+    if (!activePage || activePage.classList.contains("pe-none")) {
       return false;
     }
 
@@ -7961,7 +7932,7 @@ document.addEventListener('DOMContentLoaded', function() {
       nextPage = main;
     }
 
-if (!nextPage) return false;
+    if (!nextPage) return false;
 
     // Запрещаем взаимодействие с элементами во время свайпа
     document.body.classList.add('swipe-in-progress');
@@ -7989,10 +7960,6 @@ if (!nextPage) return false;
       nextPage.classList.remove("swipeable-page", "no-transition", "pe-none");
       nextPage.style.transform = "";
       nextPage.style.zIndex = "";
-      
-      // ОБНОВЛЯЕМ ИНДИКАТОР ПОСЛЕ УСПЕШНОГО СВАЙПА (ДОБАВЛЕНО)
-      updateNavIndicator(nextPage);
-      
       activePage = nextPage;
       nextPage = null;
     }
@@ -8100,7 +8067,7 @@ if (!nextPage) return false;
 
   }, { passive: true });
 
-document.addEventListener("touchmove", (e) => {
+  document.addEventListener("touchmove", (e) => {
     if (!isSwiping) return;
     
     const x = e.touches[0].clientX;
@@ -8142,12 +8109,6 @@ document.addEventListener("touchmove", (e) => {
       clearAfterCancel();
     }
   }, { passive: true });
-
-  // ИНИЦИАЛИЗАЦИЯ ИНДИКАТОРА ПРИ ЗАГРУЗКЕ (ДОБАВЛЕНО)
-  document.addEventListener('DOMContentLoaded', function() {
-    const currentPage = getCurrentPage();
-    updateNavIndicator(currentPage);
-  });
 
 })();
 </script>
